@@ -30,10 +30,7 @@
             ? (v / 1000000).toFixed(1).replace(/\.0$/, '') + 'M NIS'
             : (v / 1000).toFixed(0) + 'K NIS';
     }
-
-    function fmtSize(v) {
-        return v === 0 ? '0 sqm' : v + ' sqm';
-    }
+    function fmtSize(v) { return v === 0 ? '0 sqm' : v + ' sqm'; }
 
     function el(tag, cls) {
         var e = document.createElement(tag);
@@ -58,33 +55,40 @@
         return $();
     }
 
-    // Load More button selector
-    var LOAD_MORE_SELECTORS = [
-        '.elementor-button-wrapper a',
-        '.e-load-more-button',
-        '.elementor-posts__load-more',
-        'button.elementor-button',
-        'a.elementor-button',
-        '.load-more-btn',
-    ];
-
+    // Find Load More by text content - most reliable approach
     function findLoadMore() {
-        for (var i = 0; i < LOAD_MORE_SELECTORS.length; i++) {
-            var $btn = $(LOAD_MORE_SELECTORS[i]).filter(function() {
-                return /load.?more/i.test($(this).text());
-            });
-            if ($btn.length) return $btn;
-        }
-        // Fallback: any element whose text is "Load More"
-        return $('a, button').filter(function() {
-            return /load.?more/i.test($(this).text().trim());
+        var $result = $();
+        $('a, button, .elementor-button, [role="button"], input[type="button"]').each(function() {
+            var txt = $(this).text().replace(/\s+/g, ' ').trim().toLowerCase();
+            if (txt === 'load more' || txt === 'load more') {
+                $result = $result.add($(this));
+            }
         });
+        return $result;
+    }
+
+    // Get the Load More wrapper (usually an Elementor widget container)
+    function getLoadMoreWrap() {
+        var $btn = findLoadMore();
+        if (!$btn.length) return $();
+        // Walk up to find the widget container
+        var $wrap = $btn.closest('.elementor-widget, .elementor-button-wrapper, .e-load-more-anchor');
+        return $wrap.length ? $wrap : $btn.parent();
     }
 
     function getPostId($node) {
         var cls = $node.attr('class') || '';
         var m   = cls.match(/\bpost-(\d+)\b/);
         return m ? m[1] : null;
+    }
+
+    // Force show ALL cards - resets any prior ElementsKit filtering
+    function resetCards() {
+        for (var i = 0; i < CARD_SELECTORS.length; i++) {
+            $(CARD_SELECTORS[i]).css('display', '');
+        }
+        // Also clear any EK hidden classes
+        $('.e-hidden, .elementor-hidden').removeClass('e-hidden elementor-hidden');
     }
 
     function stampCards() {
@@ -112,11 +116,8 @@
             }
 
             var nums   = ($c.text().match(/\d[\d,]+/g) || []);
-            var prices = nums.map(function(n) {
-                return parseInt(n.replace(/,/g, ''));
-            }).filter(function(n) {
-                return n >= 1000000 && n <= 100000000;
-            });
+            var prices = nums.map(function(n) { return parseInt(n.replace(/,/g, '')); })
+                             .filter(function(n) { return n >= 1000000 && n <= 100000000; });
             if (prices.length) $c.attr('data-kl-price', Math.max.apply(null, prices));
         });
     }
@@ -137,10 +138,10 @@
     }
 
     function applyFilters() {
-        var $cards   = findCards();
-        var $loadBtn = findLoadMore();
-        var vis      = 0;
-        var filtering = isFiltering();
+        var $cards     = findCards();
+        var $lmWrap    = getLoadMoreWrap();
+        var vis        = 0;
+        var filtering  = isFiltering();
 
         $cards.each(function() {
             var $c   = $(this);
@@ -178,33 +179,25 @@
             if (show) vis++;
         });
 
-        // ── No results message ──────────────────────────────────────
+        // No results message
         var $nr = $('.kl-no-results');
         if (!$nr.length) {
             var nr = el('div', 'kl-no-results');
             nr.textContent = 'No properties found matching your filters.';
-            findCards().first()
+            $cards.first()
                 .closest('.elementor-posts-container, .elementor-posts, [class*="posts-container"]')
                 .after(nr);
             $nr = $(nr);
         }
-        $nr.toggle(vis === 0 && filtering);
+        $nr.css('display', (vis === 0 && filtering) ? 'block' : 'none');
 
-        // ── Hide Load More when filtering ───────────────────────────
-        if ($loadBtn.length) {
-            // Hide the button and its wrapper when filters are active
-            var $btnWrap = $loadBtn.closest('.elementor-button-wrapper, .e-load-more-anchor, .elementor-widget');
-            if ($btnWrap.length) {
-                $btnWrap.css('display', filtering ? 'none' : '');
-            } else {
-                $loadBtn.css('display', filtering ? 'none' : '');
-            }
+        // Hide/show Load More button
+        if ($lmWrap.length) {
+            $lmWrap.css('display', filtering ? 'none' : '');
         }
     }
 
-    function closeAll() {
-        $('.kl-dropdown').removeClass('kl-open');
-    }
+    function closeAll() { $('.kl-dropdown').removeClass('kl-open'); }
 
     function buildDropdown(taxKey) {
         var terms = (window.klTerms && window.klTerms[taxKey]) || [];
@@ -217,7 +210,6 @@
         wrap.setAttribute('data-kl-tax', taxKey);
 
         var allTerms = [{slug: '', name: 'All'}].concat(terms);
-
         for (var i = 0; i < allTerms.length; i++) {
             var t   = allTerms[i];
             var opt = el('div', t.slug === '' ? 'kl-drop-opt kl-selected' : 'kl-drop-opt');
@@ -229,9 +221,7 @@
         wrap.appendChild(trigger);
         wrap.appendChild(menu);
 
-        var $wrap    = $(wrap);
-        var $trigger = $(trigger);
-        var $menu    = $(menu);
+        var $wrap = $(wrap), $trigger = $(trigger), $menu = $(menu);
 
         $trigger.on('click', function(e) {
             e.stopPropagation();
@@ -241,8 +231,7 @@
         });
 
         $menu.on('click', '.kl-drop-opt', function() {
-            var $opt = $(this);
-            var val  = $opt.attr('data-val');
+            var $opt = $(this), val = $opt.attr('data-val');
             $menu.find('.kl-drop-opt').removeClass('kl-selected');
             $opt.addClass('kl-selected');
             $trigger.text($opt.text());
@@ -255,16 +244,13 @@
     }
 
     function buildSlider(id, min, max, step, fmt, loKey, hiKey) {
-        var widget   = el('div', 'kl-range-widget');
-        var inner    = el('div', 'kl-range-inner');
-        var vals     = el('div', 'kl-range-vals');
-        var spanLo   = el('span', 'kl-val-lo');
-        var spanHi   = el('span', 'kl-val-hi');
+        var widget = el('div', 'kl-range-widget'), inner = el('div', 'kl-range-inner');
+        var vals = el('div', 'kl-range-vals');
+        var spanLo = el('span', 'kl-val-lo'), spanHi = el('span', 'kl-val-hi');
         var sliderWr = el('div', 'kl-dual-slider');
-        var trackBg  = el('div', 'kl-track-bg');
-        var trackFl  = el('div', 'kl-track-fill');
+        var trackBg = el('div', 'kl-track-bg'), trackFl = el('div', 'kl-track-fill');
 
-        widget.id          = 'kl-' + id + '-slider';
+        widget.id = 'kl-' + id + '-slider';
         spanLo.textContent = fmt(min);
         spanHi.textContent = fmt(max);
 
@@ -280,22 +266,15 @@
         inpHi.type = 'range'; inpHi.className = 'kl-inp-hi';
         inpHi.min = min; inpHi.max = max; inpHi.step = step; inpHi.value = max;
 
-        sliderWr.appendChild(trackBg);
-        sliderWr.appendChild(trackFl);
-        sliderWr.appendChild(inpLo);
-        sliderWr.appendChild(inpHi);
-
-        inner.appendChild(vals);
-        inner.appendChild(sliderWr);
+        sliderWr.appendChild(trackBg); sliderWr.appendChild(trackFl);
+        sliderWr.appendChild(inpLo);  sliderWr.appendChild(inpHi);
+        inner.appendChild(vals); inner.appendChild(sliderWr);
         widget.appendChild(inner);
 
-        var $w    = $(widget);
-        var $lo   = $(inpLo);
-        var $hi   = $(inpHi);
-        var $fill = $(trackFl);
+        var $w = $(widget), $lo = $(inpLo), $hi = $(inpHi), $fill = $(trackFl);
 
         function refreshTrack() {
-            var r  = max - min;
+            var r = max - min;
             var lp = (($lo.val() - min) / r) * 100;
             var hp = (($hi.val() - min) / r) * 100;
             $fill.css({ left: lp + '%', width: (hp - lp) + '%' });
@@ -304,14 +283,12 @@
         $w.on('input', 'input', function() {
             var lo = parseInt($lo.val()), hi = parseInt($hi.val());
             if (lo > hi) {
-                if (this === inpLo) { lo = hi; $lo.val(lo); }
-                else                { hi = lo; $hi.val(hi); }
+                if (this === inpLo) { lo = hi; $lo.val(lo); } else { hi = lo; $hi.val(hi); }
             }
             spanLo.textContent = fmt(lo);
             spanHi.textContent = fmt(hi);
             refreshTrack();
-            state[loKey] = lo;
-            state[hiKey] = hi;
+            state[loKey] = lo; state[hiKey] = hi;
             applyFilters();
         });
 
@@ -335,6 +312,9 @@
 
             $w.after($r);
         });
+
+        // Force show all cards after we take over from ElementsKit
+        resetCards();
     }
 
     $(document).on('click.klfilter', function(e) {
@@ -342,8 +322,13 @@
     });
 
     function boot() {
+        // If URL has ElementsKit filter params redirect to clean URL
+        if (window.location.search && window.location.search.indexOf('e-filter') !== -1) {
+            window.location.href = window.location.pathname;
+            return;
+        }
         replaceWidgets();
-        setTimeout(stampCards, 300);
+        setTimeout(stampCards, 400);
     }
 
     $(document).ready(function() { setTimeout(boot, 500); });

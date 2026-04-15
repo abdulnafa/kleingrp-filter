@@ -58,6 +58,29 @@
         return $();
     }
 
+    // Load More button selector
+    var LOAD_MORE_SELECTORS = [
+        '.elementor-button-wrapper a',
+        '.e-load-more-button',
+        '.elementor-posts__load-more',
+        'button.elementor-button',
+        'a.elementor-button',
+        '.load-more-btn',
+    ];
+
+    function findLoadMore() {
+        for (var i = 0; i < LOAD_MORE_SELECTORS.length; i++) {
+            var $btn = $(LOAD_MORE_SELECTORS[i]).filter(function() {
+                return /load.?more/i.test($(this).text());
+            });
+            if ($btn.length) return $btn;
+        }
+        // Fallback: any element whose text is "Load More"
+        return $('a, button').filter(function() {
+            return /load.?more/i.test($(this).text().trim());
+        });
+    }
+
     function getPostId($node) {
         var cls = $node.attr('class') || '';
         var m   = cls.match(/\bpost-(\d+)\b/);
@@ -103,9 +126,21 @@
         return (attrVal || '').split(',').filter(Boolean).indexOf(selected) !== -1;
     }
 
+    function isFiltering() {
+        return state.location !== null ||
+               state.listing_type !== null ||
+               state.bedrooms !== null ||
+               state.size_lo > SIZE_MIN ||
+               state.size_hi < SIZE_MAX ||
+               state.price_lo > PRICE_MIN ||
+               state.price_hi < PRICE_MAX;
+    }
+
     function applyFilters() {
-        var $cards = findCards();
-        var vis    = 0;
+        var $cards   = findCards();
+        var $loadBtn = findLoadMore();
+        var vis      = 0;
+        var filtering = isFiltering();
 
         $cards.each(function() {
             var $c   = $(this);
@@ -143,16 +178,28 @@
             if (show) vis++;
         });
 
+        // ── No results message ──────────────────────────────────────
         var $nr = $('.kl-no-results');
         if (!$nr.length) {
-            var nr = el('p', 'kl-no-results');
-            nr.textContent = 'No properties match your filters.';
+            var nr = el('div', 'kl-no-results');
+            nr.textContent = 'No properties found matching your filters.';
             findCards().first()
-                .closest('.elementor-posts-container, .elementor-posts')
-                .append(nr);
+                .closest('.elementor-posts-container, .elementor-posts, [class*="posts-container"]')
+                .after(nr);
             $nr = $(nr);
         }
-        $nr.toggle(vis === 0);
+        $nr.toggle(vis === 0 && filtering);
+
+        // ── Hide Load More when filtering ───────────────────────────
+        if ($loadBtn.length) {
+            // Hide the button and its wrapper when filters are active
+            var $btnWrap = $loadBtn.closest('.elementor-button-wrapper, .e-load-more-anchor, .elementor-widget');
+            if ($btnWrap.length) {
+                $btnWrap.css('display', filtering ? 'none' : '');
+            } else {
+                $loadBtn.css('display', filtering ? 'none' : '');
+            }
+        }
     }
 
     function closeAll() {
@@ -217,7 +264,7 @@
         var trackBg  = el('div', 'kl-track-bg');
         var trackFl  = el('div', 'kl-track-fill');
 
-        widget.id        = 'kl-' + id + '-slider';
+        widget.id          = 'kl-' + id + '-slider';
         spanLo.textContent = fmt(min);
         spanHi.textContent = fmt(max);
 

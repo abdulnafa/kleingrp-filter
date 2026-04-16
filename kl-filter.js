@@ -1,36 +1,60 @@
 (function($) {
 
-    var PRICE_MIN = 0, PRICE_MAX = 25000000, PRICE_STEP = 250000;
-    var SIZE_MIN  = 0, SIZE_MAX  = 2000,     SIZE_STEP  = 50;
+    var PRICE_MIN = 0,  PRICE_MAX = 40000000, PRICE_STEP = 500000;
+    var SIZE_MIN  = 0,  SIZE_MAX  = 200,      SIZE_STEP  = 10;
+    var BED_MIN   = 1,  BED_MAX   = 6,        BED_STEP   = 1;
 
+    // Confirmed from property_size taxonomy admin
     var SIZE_BUCKETS = [
-        { slug: '100-to-500',   min: 100,  max: 500  },
-        { slug: '510-to-1000',  min: 510,  max: 1000 },
-        { slug: '1100-to-1500', min: 1100, max: 1500 },
-        { slug: '1510-to-2000', min: 1510, max: 2000 },
+        { slug: '100-to-500',   min: 100, max: 200 },
+        { slug: '510-to-1000',  min: 100, max: 200 },
+        { slug: '1100-to-1500', min: 100, max: 200 },
+        { slug: '1510-to-2000', min: 100, max: 200 },
     ];
 
+    // Confirmed from bedrooms taxonomy admin
+    var BED_MAP = {
+        '1-bedroom':  1,
+        '2-bedrooms': 2,
+        '3-bedrooms': 3,
+        '4-bedrooms': 4,
+        '5-bedrooms': 5,
+        '6-bedrooms': 6,
+    };
+
+    // Widget order: City | Sale/Rent | Bedrooms | Size | Price
     var WIDGET_CONFIGS = [
         { type: 'dropdown', key: 'location'     },
         { type: 'dropdown', key: 'listing_type' },
-        { type: 'dropdown', key: 'bedrooms'     },
-        { type: 'slider', id: 'size',  min: SIZE_MIN,  max: SIZE_MAX,  step: SIZE_STEP,  fmt: fmtSize,  loKey: 'size_lo',  hiKey: 'size_hi'  },
-        { type: 'slider', id: 'price', min: PRICE_MIN, max: PRICE_MAX, step: PRICE_STEP, fmt: fmtPrice, loKey: 'price_lo', hiKey: 'price_hi' },
+        { type: 'cslider',  id: 'bedrooms', min: BED_MIN,   max: BED_MAX,   step: BED_STEP,   fmt: fmtBed,   loKey: 'bed_lo',   hiKey: 'bed_hi'   },
+        { type: 'cslider',  id: 'size',     min: SIZE_MIN,  max: SIZE_MAX,  step: SIZE_STEP,  fmt: fmtSize,  loKey: 'size_lo',  hiKey: 'size_hi'  },
+        { type: 'cslider',  id: 'price',    min: PRICE_MIN, max: PRICE_MAX, step: PRICE_STEP, fmt: fmtPrice, loKey: 'price_lo', hiKey: 'price_hi' },
     ];
 
     var state = {
-        location: null, listing_type: null, bedrooms: null,
-        size_lo: SIZE_MIN,  size_hi: SIZE_MAX,
-        price_lo: PRICE_MIN, price_hi: PRICE_MAX
+        location: null, listing_type: null,
+        bed_lo:   BED_MIN,   bed_hi:   BED_MAX,
+        size_lo:  SIZE_MIN,  size_hi:  SIZE_MAX,
+        price_lo: PRICE_MIN, price_hi: PRICE_MAX,
     };
 
     function fmtPrice(v) {
         if (v === 0) return '0 NIS';
-        return v >= 1000000
-            ? (v / 1000000).toFixed(1).replace(/\.0$/, '') + 'M NIS'
-            : (v / 1000).toFixed(0) + 'K NIS';
+        var label = v >= 1000000
+            ? (v / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+            : (v / 1000).toFixed(0) + 'K';
+        return label + (v >= PRICE_MAX ? '+' : '') + ' NIS';
     }
-    function fmtSize(v) { return v === 0 ? '0 sqm' : v + ' sqm'; }
+
+    function fmtSize(v) {
+        if (v === 0) return '0 sqm';
+        return v + (v >= SIZE_MAX ? '+' : '') + ' sqm';
+    }
+
+    function fmtBed(v) {
+        if (v <= BED_MIN) return '1 Bed';
+        return v + (v >= BED_MAX ? '+' : '') + ' Beds';
+    }
 
     function el(tag, cls) {
         var e = document.createElement(tag);
@@ -49,53 +73,38 @@
 
     function findCards() {
         for (var i = 0; i < CARD_SELECTORS.length; i++) {
-            var found = $(CARD_SELECTORS[i]);
-            if (found.length > 0) return found;
+            var f = $(CARD_SELECTORS[i]);
+            if (f.length > 0) return f;
         }
         return $();
     }
 
-    // Find Load More by text content - most reliable approach
-    function findLoadMore() {
-        var $result = $();
-        $('a, button, .elementor-button, [role="button"], input[type="button"]').each(function() {
-            var txt = $(this).text().replace(/\s+/g, ' ').trim().toLowerCase();
-            if (txt === 'load more' || txt === 'load more') {
-                $result = $result.add($(this));
-            }
-        });
-        return $result;
-    }
-
-    // Get the Load More wrapper (usually an Elementor widget container)
     function getLoadMoreWrap() {
-        var $btn = findLoadMore();
+        var $btn = $('a, button').filter(function() {
+            return /load.?more/i.test($(this).text().trim());
+        });
         if (!$btn.length) return $();
-        // Walk up to find the widget container
-        var $wrap = $btn.closest('.elementor-widget, .elementor-button-wrapper, .e-load-more-anchor');
-        return $wrap.length ? $wrap : $btn.parent();
+        var $w = $btn.closest('.elementor-widget, .elementor-button-wrapper, .e-load-more-anchor');
+        return $w.length ? $w : $btn.parent();
     }
 
-    function getPostId($node) {
-        var cls = $node.attr('class') || '';
-        var m   = cls.match(/\bpost-(\d+)\b/);
+    function getPostId($n) {
+        var m = ($n.attr('class') || '').match(/\bpost-(\d+)\b/);
         return m ? m[1] : null;
     }
 
-    // Force show ALL cards - resets any prior ElementsKit filtering
     function resetCards() {
         for (var i = 0; i < CARD_SELECTORS.length; i++) {
             $(CARD_SELECTORS[i]).css('display', '');
         }
-        // Also clear any EK hidden classes
         $('.e-hidden, .elementor-hidden').removeClass('e-hidden elementor-hidden');
     }
 
     function stampCards() {
         findCards().each(function() {
             var $c = $(this);
-            if ($c.attr('data-kl-stamped')) return;
-            $c.attr('data-kl-stamped', '1');
+            if ($c.attr('data-kl-ok')) return;
+            $c.attr('data-kl-ok', '1');
 
             var pid = getPostId($c);
             if (!pid) {
@@ -115,48 +124,64 @@
                 if (d.sizes        && d.sizes.length)        $c.attr('data-kl-sz',  d.sizes.join(','));
             }
 
-            var nums   = ($c.text().match(/\d[\d,]+/g) || []);
-            var prices = nums.map(function(n) { return parseInt(n.replace(/,/g, '')); })
-                             .filter(function(n) { return n >= 1000000 && n <= 100000000; });
+            var nums = ($c.text().match(/\d[\d,]+/g) || []);
+            var prices = nums.map(function(n) {
+                return parseInt(n.replace(/,/g, ''));
+            }).filter(function(n) {
+                return n >= 1000000 && n <= 200000000;
+            });
             if (prices.length) $c.attr('data-kl-price', Math.max.apply(null, prices));
         });
     }
 
-    function matchesTerm(attrVal, selected) {
-        if (!selected) return true;
-        return (attrVal || '').split(',').filter(Boolean).indexOf(selected) !== -1;
+    function matchesTerm(attr, sel) {
+        if (!sel) return true;
+        return (attr || '').split(',').filter(Boolean).indexOf(sel) !== -1;
     }
 
     function isFiltering() {
         return state.location !== null ||
                state.listing_type !== null ||
-               state.bedrooms !== null ||
-               state.size_lo > SIZE_MIN ||
-               state.size_hi < SIZE_MAX ||
-               state.price_lo > PRICE_MIN ||
-               state.price_hi < PRICE_MAX;
+               state.bed_lo   > BED_MIN   || state.bed_hi   < BED_MAX   ||
+               state.size_lo  > SIZE_MIN  || state.size_hi  < SIZE_MAX  ||
+               state.price_lo > PRICE_MIN || state.price_hi < PRICE_MAX;
     }
 
     function applyFilters() {
-        var $cards     = findCards();
-        var $lmWrap    = getLoadMoreWrap();
-        var vis        = 0;
-        var filtering  = isFiltering();
+        var $cards    = findCards();
+        var $lmWrap   = getLoadMoreWrap();
+        var filtering = isFiltering();
+        var vis       = 0;
 
         $cards.each(function() {
-            var $c   = $(this);
-            var show = true;
+            var $c = $(this), show = true;
 
+            // Dropdown filters
             if (!matchesTerm($c.attr('data-kl-loc'), state.location))     show = false;
             if (!matchesTerm($c.attr('data-kl-lt'),  state.listing_type)) show = false;
-            if (!matchesTerm($c.attr('data-kl-bed'), state.bedrooms))     show = false;
 
+            // Bedrooms range
+            if (show) {
+                var bedSlugs = ($c.attr('data-kl-bed') || '').split(',').filter(Boolean);
+                if (bedSlugs.length > 0) {
+                    var bedOk = false;
+                    for (var i = 0; i < bedSlugs.length; i++) {
+                        var num = BED_MAP[bedSlugs[i]];
+                        if (num !== undefined && num >= state.bed_lo && num <= state.bed_hi) {
+                            bedOk = true; break;
+                        }
+                    }
+                    if (!bedOk) show = false;
+                }
+            }
+
+            // Size range
             if (show) {
                 var sizes = ($c.attr('data-kl-sz') || '').split(',').filter(Boolean);
                 if (sizes.length > 0) {
                     var szOk = false;
-                    for (var i = 0; i < SIZE_BUCKETS.length; i++) {
-                        var b = SIZE_BUCKETS[i];
+                    for (var j = 0; j < SIZE_BUCKETS.length; j++) {
+                        var b = SIZE_BUCKETS[j];
                         if (sizes.indexOf(b.slug) !== -1 && b.max >= state.size_lo && b.min <= state.size_hi) {
                             szOk = true; break;
                         }
@@ -165,6 +190,7 @@
                 }
             }
 
+            // Price range
             if (show) {
                 var price = parseInt($c.attr('data-kl-price') || 0);
                 if (!price) {
@@ -191,27 +217,28 @@
         }
         $nr.css('display', (vis === 0 && filtering) ? 'block' : 'none');
 
-        // Hide/show Load More button
-        if ($lmWrap.length) {
-            $lmWrap.css('display', filtering ? 'none' : '');
-        }
+        // Hide Load More when filtering
+        if ($lmWrap.length) $lmWrap.css('display', filtering ? 'none' : '');
     }
 
-    function closeAll() { $('.kl-dropdown').removeClass('kl-open'); }
+    /* ── CLOSE ALL ─────────────────────────────────────────────── */
+    function closeAll() {
+        $('.kl-dropdown').removeClass('kl-open');
+        $('.kl-cslider').removeClass('kl-open');
+    }
 
+    /* ── BUILD DROPDOWN ────────────────────────────────────────── */
     function buildDropdown(taxKey) {
-        var terms = (window.klTerms && window.klTerms[taxKey]) || [];
-
+        var terms   = (window.klTerms && window.klTerms[taxKey]) || [];
         var wrap    = el('div', 'kl-dropdown');
         var trigger = el('div', 'kl-drop-trigger');
         var menu    = el('div', 'kl-drop-menu');
 
         trigger.textContent = 'All';
-        wrap.setAttribute('data-kl-tax', taxKey);
 
-        var allTerms = [{slug: '', name: 'All'}].concat(terms);
-        for (var i = 0; i < allTerms.length; i++) {
-            var t   = allTerms[i];
+        var all = [{slug: '', name: 'All'}].concat(terms);
+        for (var i = 0; i < all.length; i++) {
+            var t   = all[i];
             var opt = el('div', t.slug === '' ? 'kl-drop-opt kl-selected' : 'kl-drop-opt');
             opt.setAttribute('data-val', t.slug);
             opt.textContent = t.name;
@@ -221,20 +248,20 @@
         wrap.appendChild(trigger);
         wrap.appendChild(menu);
 
-        var $wrap = $(wrap), $trigger = $(trigger), $menu = $(menu);
+        var $wrap = $(wrap), $trig = $(trigger), $menu = $(menu);
 
-        $trigger.on('click', function(e) {
+        $trig.on('click', function(e) {
             e.stopPropagation();
-            var wasOpen = $wrap.hasClass('kl-open');
+            var was = $wrap.hasClass('kl-open');
             closeAll();
-            if (!wasOpen) $wrap.addClass('kl-open');
+            if (!was) $wrap.addClass('kl-open');
         });
 
         $menu.on('click', '.kl-drop-opt', function() {
-            var $opt = $(this), val = $opt.attr('data-val');
+            var $o  = $(this), val = $o.attr('data-val');
             $menu.find('.kl-drop-opt').removeClass('kl-selected');
-            $opt.addClass('kl-selected');
-            $trigger.text($opt.text());
+            $o.addClass('kl-selected');
+            $trig.text($o.text());
             $wrap.removeClass('kl-open');
             state[taxKey] = val || null;
             applyFilters();
@@ -243,16 +270,21 @@
         return $wrap;
     }
 
-    function buildSlider(id, min, max, step, fmt, loKey, hiKey) {
-        var widget = el('div', 'kl-range-widget'), inner = el('div', 'kl-range-inner');
-        var vals = el('div', 'kl-range-vals');
-        var spanLo = el('span', 'kl-val-lo'), spanHi = el('span', 'kl-val-hi');
-        var sliderWr = el('div', 'kl-dual-slider');
-        var trackBg = el('div', 'kl-track-bg'), trackFl = el('div', 'kl-track-fill');
+    /* ── BUILD COLLAPSIBLE SLIDER ──────────────────────────────── */
+    function buildCollapsibleSlider(id, min, max, step, fmt, loKey, hiKey) {
+        var wrap    = el('div', 'kl-cslider');
+        var trigger = el('div', 'kl-cs-trigger');
+        var panel   = el('div', 'kl-cs-panel');
+        var vals    = el('div', 'kl-range-vals');
+        var spanLo  = el('span', 'kl-val-lo');
+        var spanHi  = el('span', 'kl-val-hi');
+        var slWr    = el('div', 'kl-dual-slider');
+        var trackBg = el('div', 'kl-track-bg');
+        var trackFl = el('div', 'kl-track-fill');
 
-        widget.id = 'kl-' + id + '-slider';
-        spanLo.textContent = fmt(min);
-        spanHi.textContent = fmt(max);
+        trigger.textContent = 'All';
+        spanLo.textContent  = fmt(min);
+        spanHi.textContent  = fmt(max);
 
         vals.appendChild(spanLo);
         vals.appendChild(document.createTextNode(' \u2014 '));
@@ -266,36 +298,57 @@
         inpHi.type = 'range'; inpHi.className = 'kl-inp-hi';
         inpHi.min = min; inpHi.max = max; inpHi.step = step; inpHi.value = max;
 
-        sliderWr.appendChild(trackBg); sliderWr.appendChild(trackFl);
-        sliderWr.appendChild(inpLo);  sliderWr.appendChild(inpHi);
-        inner.appendChild(vals); inner.appendChild(sliderWr);
-        widget.appendChild(inner);
+        slWr.appendChild(trackBg);
+        slWr.appendChild(trackFl);
+        slWr.appendChild(inpLo);
+        slWr.appendChild(inpHi);
 
-        var $w = $(widget), $lo = $(inpLo), $hi = $(inpHi), $fill = $(trackFl);
+        panel.appendChild(vals);
+        panel.appendChild(slWr);
+        wrap.appendChild(trigger);
+        wrap.appendChild(panel);
+
+        var $wrap = $(wrap), $trig = $(trigger);
+        var $lo   = $(inpLo), $hi = $(inpHi), $fill = $(trackFl);
+
+        $trig.on('click', function(e) {
+            e.stopPropagation();
+            var was = $wrap.hasClass('kl-open');
+            closeAll();
+            if (!was) $wrap.addClass('kl-open');
+        });
 
         function refreshTrack() {
-            var r = max - min;
+            var r  = max - min;
             var lp = (($lo.val() - min) / r) * 100;
             var hp = (($hi.val() - min) / r) * 100;
             $fill.css({ left: lp + '%', width: (hp - lp) + '%' });
         }
 
-        $w.on('input', 'input', function() {
+        $wrap.on('input', 'input', function(e) {
+            e.stopPropagation();
             var lo = parseInt($lo.val()), hi = parseInt($hi.val());
             if (lo > hi) {
-                if (this === inpLo) { lo = hi; $lo.val(lo); } else { hi = lo; $hi.val(hi); }
+                if (this === inpLo) { lo = hi; $lo.val(lo); }
+                else                { hi = lo; $hi.val(hi); }
             }
             spanLo.textContent = fmt(lo);
             spanHi.textContent = fmt(hi);
             refreshTrack();
-            state[loKey] = lo; state[hiKey] = hi;
+            state[loKey] = lo;
+            state[hiKey] = hi;
+
+            // Update trigger label
+            $trig.text(lo <= min && hi >= max ? 'All' : fmt(lo) + ' \u2014 ' + fmt(hi));
+
             applyFilters();
         });
 
         refreshTrack();
-        return $w;
+        return $wrap;
     }
 
+    /* ── REPLACE ALL 5 WIDGETS ─────────────────────────────────── */
     function replaceWidgets() {
         var $all = $('.elementor-widget-taxonomy-filter');
         if (!$all.length) return;
@@ -308,21 +361,21 @@
             var cfg = WIDGET_CONFIGS[i];
             var $r  = cfg.type === 'dropdown'
                 ? buildDropdown(cfg.key)
-                : buildSlider(cfg.id, cfg.min, cfg.max, cfg.step, cfg.fmt, cfg.loKey, cfg.hiKey);
+                : buildCollapsibleSlider(cfg.id, cfg.min, cfg.max, cfg.step, cfg.fmt, cfg.loKey, cfg.hiKey);
 
             $w.after($r);
         });
 
-        // Force show all cards after we take over from ElementsKit
         resetCards();
     }
 
+    /* ── OUTSIDE CLICK ─────────────────────────────────────────── */
     $(document).on('click.klfilter', function(e) {
-        if (!$(e.target).closest('.kl-dropdown').length) closeAll();
+        if (!$(e.target).closest('.kl-dropdown, .kl-cslider').length) closeAll();
     });
 
+    /* ── BOOT ──────────────────────────────────────────────────── */
     function boot() {
-        // If URL has ElementsKit filter params redirect to clean URL
         if (window.location.search && window.location.search.indexOf('e-filter') !== -1) {
             window.location.href = window.location.pathname;
             return;

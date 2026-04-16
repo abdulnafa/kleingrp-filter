@@ -338,6 +338,21 @@
             state[loKey] = lo;
             state[hiKey] = hi;
 
+            // Fix overlap: when thumbs meet, raise z-index of the active thumb
+            // so user can always drag it away from the stuck position
+            if (lo === hi) {
+                if (this === inpLo) {
+                    inpLo.style.zIndex = 5;
+                    inpHi.style.zIndex = 4;
+                } else {
+                    inpHi.style.zIndex = 5;
+                    inpLo.style.zIndex = 4;
+                }
+            } else {
+                inpLo.style.zIndex = '';
+                inpHi.style.zIndex = '';
+            }
+
             // Update trigger label
             $trig.text(lo <= min && hi >= max ? 'All' : fmt(lo) + ' \u2014 ' + fmt(hi));
 
